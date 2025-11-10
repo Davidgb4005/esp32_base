@@ -1,5 +1,6 @@
 #pragma once
 #include "freertos/FreeRTOS.h"
+#include "Config.hpp"
 class RingBuffer
 {
 public:

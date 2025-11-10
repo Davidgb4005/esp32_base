@@ -5,7 +5,7 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/components/RingBuffer",
-                "${workspaceFolder}/components/Tcp"
+                "${workspaceFolder}/components/Tcp",
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",

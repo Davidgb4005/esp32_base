@@ -1,6 +1,6 @@
 #include "RingBuffer.hpp"
 #include <memory>
-#define DEBUG 1
+
 #if DEBUG
 #include <iostream>
 #endif

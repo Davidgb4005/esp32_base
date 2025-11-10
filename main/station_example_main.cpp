@@ -6,6 +6,7 @@
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
    CONDITIONS OF ANY KIND, either express or implied.
 */
+
 #include <iostream>
 #include <string.h>
 #include "RingBuffer.hpp"
@@ -26,13 +27,14 @@
 
 //test
 extern "C" void app_main(void)
-{
+{   \
     TcpTaskParams parameters = {
+        "192.168.8.116",
+        8090,                 //TCP Port
         new RingBuffer(5000), // rx_ring_buffer
         new RingBuffer(5000), // tx_ring_buffer
         true                  // non_blocking
     };
-
     char message1[] = {5, 'H', 'E', 'L', 'L', 'O'};
     char message2[] = {4, 'T', 'H', 'I', 'S'};
     char message3[] = {2, 'I', 'S'};
@@ -52,12 +54,13 @@ extern "C" void app_main(void)
 
     TcpApi::WifiConfigCheck();
     TcpApi::WifiInit("ESP32", "Pa55w0rd");
-    xTaskCreate(TcpApi::TcpServerTask, "tcp_server_task", 4096, &parameters, 5, NULL);
+    xTaskCreate(TcpApi::TcpClientTask, "tcp_server_task", 4096, &parameters, 5, NULL);
     char buffer[255];
     int len;
+    bool flip_bit = true;
     while (1)
     {
-        if (parameters.tx_ring->DataAvailible() == 0 && parameters.rx_ring->DataAvailible() != 0)
+        if ((parameters.tx_ring->DataAvailible() == 0 && parameters.rx_ring->DataAvailible() != 0) or flip_bit)
         {
             // Write all messages and fragments to ring buffer
             parameters.tx_ring->WriteData(message1, sizeof(message1));
@@ -74,12 +77,14 @@ extern "C" void app_main(void)
             parameters.tx_ring->WriteData(message9_part2, sizeof(message9_part2));
 
             parameters.tx_ring->WriteData(message10, sizeof(message10));
+            //flip_bit = false;
         }
         len = parameters.rx_ring->ReadData(buffer);
         if (len > 0)
         {
             RingBuffer::PrintMsg(buffer, len);
         }
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
         vTaskDelay(1);
     }
 }

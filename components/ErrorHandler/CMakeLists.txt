@@ -1,7 +1,6 @@
 idf_component_register(
-    SRCS "RingBuffer.cpp"
+    SRCS "ErrorHandler.cpp"
     INCLUDE_DIRS "."
     PRIV_REQUIRES 
         Config
-
 )
