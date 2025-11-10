@@ -1,0 +1,16 @@
+/README.md
+/build
+/dependencies.lock
+/pytest_wifi_station.py
+/sdkconfig
+/sdkconfig.ci
+/sdkconfig.ci.c3eco7
+/sdkconfig.ci.enable_softap
+/sdkconfig.ci.esp32c2_xtal26m
+/sdkconfig.ci.esp32c2eco4_xtal26m
+/sdkconfig.ci.ft
+/sdkconfig.ci.rrm
+/sdkconfig.ci.wnm
+/sdkconfig.ci.wpa_psk
+/sdkconfig.defaults
+/sdkconfig.old
