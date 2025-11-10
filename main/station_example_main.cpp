@@ -25,16 +25,17 @@
 #include "lwip/sys.h"
 #include "esp_task_wdt.h"
 
-//test
+// test
 extern "C" void app_main(void)
-{   \
-    TcpTaskParams parameters = {
+{
+    TcpApi socket(
         "192.168.8.116",
-        8090,                 //TCP Port
+        8090,                 // TCP Port
         new RingBuffer(5000), // rx_ring_buffer
         new RingBuffer(5000), // tx_ring_buffer
         true                  // non_blocking
-    };
+    );
+
     char message1[] = {5, 'H', 'E', 'L', 'L', 'O'};
     char message2[] = {4, 'T', 'H', 'I', 'S'};
     char message3[] = {2, 'I', 'S'};
@@ -54,34 +55,38 @@ extern "C" void app_main(void)
 
     TcpApi::WifiConfigCheck();
     TcpApi::WifiInit("ESP32", "Pa55w0rd");
-    xTaskCreate(TcpApi::TcpClientTask, "tcp_server_task", 4096, &parameters, 5, NULL);
+    xTaskCreate(TcpApi::TcpClientTask, "tcp_server_task", 4096, &socket, 5, NULL);
     char buffer[255];
-    int len;
+    int len = 0;
     bool flip_bit = true;
     while (1)
     {
-        if ((parameters.tx_ring->DataAvailible() == 0 && parameters.rx_ring->DataAvailible() != 0) or flip_bit)
+        if ((socket.parameters.tx_ring->DataAvailible() == 0 && socket.parameters.rx_ring->DataAvailible() != 0) && flip_bit)
         {
             // Write all messages and fragments to ring buffer
-            parameters.tx_ring->WriteData(message1, sizeof(message1));
-            parameters.tx_ring->WriteData(message2, sizeof(message2));
-            parameters.tx_ring->WriteData(message3, sizeof(message3));
-            parameters.tx_ring->WriteData(message4, sizeof(message4));
-            parameters.tx_ring->WriteData(message5, sizeof(message5));
-            parameters.tx_ring->WriteData(message6, sizeof(message6));
-            parameters.tx_ring->WriteData(message7, sizeof(message7));
+            socket.parameters.tx_ring->WriteData(message1, sizeof(message1));
+            socket.parameters.tx_ring->WriteData(message2, sizeof(message2));
+            socket.parameters.tx_ring->WriteData(message3, sizeof(message3));
+            socket.parameters.tx_ring->WriteData(message4, sizeof(message4));
+            socket.parameters.tx_ring->WriteData(message5, sizeof(message5));
+            socket.parameters.tx_ring->WriteData(message6, sizeof(message6));
+            socket.parameters.tx_ring->WriteData(message7, sizeof(message7));
 
-            parameters.tx_ring->WriteData(message8_part1, sizeof(message8_part1));
-            parameters.tx_ring->WriteData(message8_part2, sizeof(message8_part2));
-            parameters.tx_ring->WriteData(message9_part1, sizeof(message9_part1));
-            parameters.tx_ring->WriteData(message9_part2, sizeof(message9_part2));
+            socket.parameters.tx_ring->WriteData(message8_part1, sizeof(message8_part1));
+            socket.parameters.tx_ring->WriteData(message8_part2, sizeof(message8_part2));
+            socket.parameters.tx_ring->WriteData(message9_part1, sizeof(message9_part1));
+            socket.parameters.tx_ring->WriteData(message9_part2, sizeof(message9_part2));
 
-            parameters.tx_ring->WriteData(message10, sizeof(message10));
-            //flip_bit = false;
+            socket.parameters.tx_ring->WriteData(message10, sizeof(message10));
+            flip_bit = false;
         }
-        len = parameters.rx_ring->ReadData(buffer);
+
+        len = socket.parameters.rx_ring->ReadData(buffer);
         if (len > 0)
         {
+            if (buffer[2] == 49){
+            socket.ResetSocket();
+        }
             RingBuffer::PrintMsg(buffer, len);
         }
         vTaskDelay(2000 / portTICK_PERIOD_MS);
