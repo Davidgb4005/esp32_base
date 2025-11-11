@@ -10,7 +10,7 @@
  */
 
 #include "TcpApi.hpp"
-#include "ErrorHandler.hpp"
+#include "Debug.hpp"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -26,7 +26,7 @@
 #include "esp_task_wdt.h"
 #include <fcntl.h>
 #include <cstring>
-#include <iostream>
+
 /// Event group to signal Wi-Fi connection status
 static EventGroupHandle_t s_wifi_event_group;
 
@@ -47,25 +47,20 @@ static int s_retry_num = 0;
 //                              Constructors / Destructors
 // ============================================================================
 
-TcpApi::TcpApi(const char *ip_addr, int port, RingBuffer *tx_ring, RingBuffer *rx_ring, bool non_blocking)
+TcpApi::TcpApi(const char *ip_addr, int port, int tx_buffer_size, int rx_buffer_size, int socket_type)
 {
 
-    parameters.ip_addr = ip_addr;
-    parameters.port = port;
-    parameters.tx_ring = tx_ring;
-    parameters.rx_ring = rx_ring;
-    parameters.non_blocking = non_blocking;
+    this->ip_addr = ip_addr;
+    this->port = port;
+    rx_ring = new RingBuffer(rx_buffer_size);
+    tx_ring = new RingBuffer(tx_buffer_size);
+    this->socket_type = socket_type;
 }
 
-TcpApi::~TcpApi() = default;
+TcpApi::~TcpApi()
+{
+}
 
-// ============================================================================
-//                              Wi-Fi Configuration
-// ============================================================================
-
-/**
- * @brief Ensures NVS flash is initialized before using Wi-Fi.
- */
 void TcpApi::WifiConfigCheck(void)
 {
     esp_err_t ret = nvs_flash_init();
@@ -77,9 +72,6 @@ void TcpApi::WifiConfigCheck(void)
     ESP_ERROR_CHECK(ret);
 }
 
-/**
- * @brief Event handler for Wi-Fi and IP events.
- */
 static void EventHandler(void *arg, esp_event_base_t event_base,
                          int32_t event_id, void *event_data)
 {
@@ -171,305 +163,234 @@ void TcpApi::WifiInit(const char *ssid, const char *password)
     }
 }
 
-// ============================================================================
-//                              Socket Handling
-// ============================================================================
-
-/**
- * @brief Creates a TCP server socket and waits for a client connection.
- * @param[in] ip_addr The IP address to bind the server to (use nullptr for INADDR_ANY).
- * @param[in,out] port Reference to the port to listen on.
- * @return The accepted socket descriptor, or -1 on failure.
- */
-int TcpApi::AttachSocket()
+void TcpApi::ServerSocket()
 {
-    int listen_sock, accept_sock;
     struct sockaddr_in server_addr{}, client_addr{};
     socklen_t addr_len = sizeof(client_addr);
 
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = (parameters.ip_addr && strlen(parameters.ip_addr) > 0)
-                                      ? inet_addr(parameters.ip_addr)
+    server_addr.sin_addr.s_addr = (ip_addr && strlen(ip_addr) > 0)
+                                      ? inet_addr(ip_addr)
                                       : INADDR_ANY;
-    server_addr.sin_port = htons(parameters.port);
+    server_addr.sin_port = htons(port);
 
-    listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    if (listen_sock < 0)
+    sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+    if (sock < 0)
     {
         PrintError("Creating", errno);
-        return -1;
     }
 
-    if (bind(listen_sock, reinterpret_cast<struct sockaddr *>(&server_addr), sizeof(server_addr)) < 0)
+    if (bind(sock, reinterpret_cast<struct sockaddr *>(&server_addr), sizeof(server_addr)) < 0)
     {
         PrintError("Binding", errno);
-        close(listen_sock);
-        return -1;
+        close(sock);
     }
 
-    if (listen(listen_sock, 10) < 0)
+    if (listen(sock, 10) < 0)
     {
         PrintError("Listening", errno);
-        close(listen_sock);
-        return -1;
+        close(sock);
     }
 
-    accept_sock = accept(listen_sock, reinterpret_cast<struct sockaddr *>(&client_addr), &addr_len);
-    close(listen_sock);
+    sock = accept(sock, reinterpret_cast<struct sockaddr *>(&client_addr), &addr_len);
 
-    if (!SOCKET_BLOCKING)
-    {
-        int flags = fcntl(accept_sock, F_GETFL, 0);
-        fcntl(accept_sock, F_SETFL, flags | O_NONBLOCK);
-    }
-
-    if (accept_sock < 0)
+    if (sock < 0)
     {
         PrintError("Accepting", errno);
-        return -1;
+        close(sock);
     }
-
-    return accept_sock;
 }
 
-/**
- * @brief Connects to a TCP server socket.
- * @param[in] ip_addr The server's IP address.
- * @param[in,out] port Reference to the server port.
- * @return The connected socket descriptor, or -1 on failure.
- */
-int TcpApi::ConnectSocket()
+void TcpApi::ClientSocket()
 {
-    int client_socket;
     struct sockaddr_in server_addr{};
     socklen_t addr_len = sizeof(server_addr);
 
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(parameters.ip_addr);
-    server_addr.sin_port = htons(parameters.port);
+    server_addr.sin_addr.s_addr = inet_addr(ip_addr);
+    server_addr.sin_port = htons(port);
 
-    client_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    if (client_socket < 0)
+    sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+    if (sock < 1)
     {
         PrintError("Socket Creation", errno);
-        return -1;
     }
 
-    if (connect(client_socket, reinterpret_cast<struct sockaddr *>(&server_addr), sizeof(server_addr)) < 0)
+    if (connect(sock, reinterpret_cast<struct sockaddr *>(&server_addr), sizeof(server_addr)) < 1)
     {
         PrintError("Socket Connection", errno);
-        close(client_socket);
-        return -1;
+        close(sock);
     }
-
-    if (!SOCKET_BLOCKING)
-    {
-        int flags = fcntl(client_socket, F_GETFL, 0);
-        fcntl(client_socket, F_SETFL, flags | O_NONBLOCK);
-    }
-
-    return client_socket;
+    PrintReport("Socket Connected: ", sock);
 }
 
-// ============================================================================
-//                              Server Task
-// ============================================================================
-
-/**
- * @brief FreeRTOS task that manages TCP server communication.
- * @param[in] PvParameters Pointer to a TcpTaskParams struct.
- */
-void TcpApi::TcpServerTask(void *PvParameters)
+void TcpApi::BeginSocket()
 {
-    TcpApi *instance = static_cast<TcpApi *>(PvParameters);
-
-    char rx_buffer[256], tx_buffer[256];
-    int rx_len = 0, tx_len = 0, bytes_sent = 0;
-    int rx_buffer_status = 0, tx_buffer_status = 0;
-
-    int accept_sock = instance->AttachSocket();
-
-    // Lambda for closing the socket safely
-    auto CloseSocket = [=, &accept_sock]()
+    reset_socket = false;
+    vTaskDelay(300 / portTICK_PERIOD_MS);
+    if (sock > 0)
     {
-        ESP_LOGI(TAG, "Client disconnected");
-        close(accept_sock);
-        instance->parameters.tx_ring->ResetBuffer();
-        instance->parameters.rx_ring->ResetBuffer();
-        accept_sock = 0;
-    };
-
-    if (instance->parameters.non_blocking)
-    {
-        int flags = fcntl(accept_sock, F_GETFL, 0);
-        fcntl(accept_sock, F_SETFL, flags | O_NONBLOCK);
+        PrintReport("Already Active Socket: ", sock);
     }
-
-    while (true)
+    else
     {
-        if (accept_sock > 0)
+        switch (socket_type)
         {
-            if (rx_buffer_status != RingBuffer::BUFFER_FULL)
-                rx_len = recv(accept_sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
-
-            if (rx_len > 0)
-                rx_buffer_status = instance->parameters.rx_ring->WriteData(rx_buffer, rx_len);
-            else if (rx_len == 0 || rx_buffer_status <= RingBuffer::UNEXPECTED_ERROR)
-                CloseSocket();
-
-            if (bytes_sent > 0 || 1) // TODO: Replace condition
-                tx_len = instance->parameters.tx_ring->ReadData(tx_buffer);
-
-            if (tx_buffer_status <= RingBuffer::UNEXPECTED_ERROR)
-                CloseSocket();
-
-            if (tx_len > 0)
+        case SERVER:
+            PrintReport("Starting Server - IP: ", ip_addr, " Port: ", port);
+            ServerSocket();
+            if (sock < 1)
+                PrintReport("Server Not Ready");
+            else
+                PrintReport("Server Ready");
+            break;
+        case CLIENT:
+            PrintReport("Client Connecting To - IP: ", ip_addr, " Port: ", port);
+            ClientSocket();
+            if (sock < 1)
+                PrintReport("Client Not Ready");
+            else
+                PrintReport("Client Ready");
+            break;
+        default:
+            sock = -1;
+            PrintReport("Invalid Socket Type Check SOCKET_TYPE Enum For Details");
+            break;
+        }
+    }
+}
+void TcpApi::CloseSocket()
+{
+    if (sock <= 1)
+    {
+        PrintReport("No Active Socket");
+    }
+    else
+    {
+        if (1)
+        {
+            close(sock);
+            rx_ring->ResetBuffer();
+            tx_ring->ResetBuffer();
+            sock = -1;
+            switch (socket_type)
             {
-                bytes_sent = send(accept_sock, tx_buffer, tx_len, 0);
-                if (bytes_sent <= 1)
-                    CloseSocket();
-            }
-            if (instance->SetSocket())
-            {
-                CloseSocket();
+            case SERVER:
+                PrintReport("Closing Server Socket: ", sock);
+                break;
+            case CLIENT:
+                PrintReport("Closing Client Socket: ", sock);
+                break;
+            default:
+                PrintReport("Invalid Socket Type Check SOCKET_TYPE Enum For Details");
+                break;
             }
         }
         else
         {
-
-            ESP_LOGI(TAG, "No active connection. Re-establishing socket...");
-            accept_sock = instance->AttachSocket();
-            if (accept_sock < 0)
-            {
-                ESP_LOGE(TAG, "Failed to re-establish socket");
-                vTaskDelay(100 / portTICK_PERIOD_MS);
-            }
-            else
-            {
-                ESP_LOGI(TAG, "New connection established");
-            }
+            PrintReport("Failed To Close Socket: ", sock);
         }
-        vTaskDelay(1);
+    }
+}
+void TcpApi::SetBlocking(bool blocking)
+{
+    if (blocking)
+    {
+        int flags = fcntl(sock, F_GETFL, 0);
+        fcntl(sock, F_SETFL, flags & ~O_NONBLOCK);
+    }
+    else
+    {
+        int flags = fcntl(sock, F_GETFL, 0);
+        fcntl(sock, F_SETFL, flags | O_NONBLOCK);
     }
 }
 
-// ============================================================================
-//                              Client Task
-// ============================================================================
-
-/**
- * @brief FreeRTOS task that manages TCP client communication.
- * @param[in] PvParameters Pointer to a TcpTaskParams struct.
- */
-void TcpApi::TcpClientTask(void *PvParameters)
+int TcpApi::Read(int status)
 {
-    TcpApi *instance = static_cast<TcpApi *>(PvParameters);
-    char empty_buffer[1] = {0};
-    char rx_buffer[256], tx_buffer[256];
-    int rx_len = 0, tx_len = 0, bytes_sent = 0;
-    int rx_buffer_status = 0, tx_buffer_status = 0;
-
-    int client_socket = instance->ConnectSocket();
-
-    auto CloseSocket = [=, &client_socket]()
+    char buffer[256];
+    int len = 0;
+    if (status != RingBuffer::BUFFER_FULL)
     {
-        if (client_socket > 0)
+        len = recv(sock, buffer, sizeof(buffer) - 1, 0);
+        if (len < 1)
         {
-            ESP_LOGI(TAG, "Server disconnected");
-            close(client_socket);
-            instance->parameters.tx_ring->ResetBuffer();
-            instance->parameters.rx_ring->ResetBuffer();
-            client_socket = -1;
-        }
-    };
-    auto ShutDownSocket = [=, &client_socket]()
-    {
-        if (client_socket > 0)
-        {
-            shutdown(client_socket, SHUT_RDWR);
-            ESP_LOGI(TAG, "Server disconnected");
-            close(client_socket);
-            instance->parameters.tx_ring->ResetBuffer();
-            instance->parameters.rx_ring->ResetBuffer();
-            client_socket = -1;
-        }
-    };
-
-    if (instance->parameters.non_blocking)
-    {
-        int flags = fcntl(client_socket, F_GETFL, 0);
-        fcntl(client_socket, F_SETFL, flags | O_NONBLOCK);
-    }
-
-    while (true)
-    {
-        if (client_socket > 0)
-        {
-            if (rx_buffer_status != RingBuffer::BUFFER_FULL and client_socket > 0)
-            {
-                rx_len = recv(client_socket, rx_buffer, sizeof(rx_buffer) - 1, 0);
-            }
-
-            if (rx_len > 0)
-            {
-                rx_buffer_status = instance->parameters.rx_ring->WriteData(rx_buffer, rx_len);
-            }
-            else if (rx_len == 0 || rx_buffer_status <= RingBuffer::UNEXPECTED_ERROR)
-            {
-                CloseSocket();
-            }
-
-            if (bytes_sent > 0 || 1) // TODO: Replace condition
-            {
-                tx_len = instance->parameters.tx_ring->ReadData(tx_buffer);
-            }
-
-            if (tx_buffer_status <= RingBuffer::UNEXPECTED_ERROR)
-            {
-                CloseSocket();
-            }
-
-            if (tx_len > 0 and client_socket > 0)
-            {
-                bytes_sent = send(client_socket, tx_buffer, tx_len, 0);
-                if (bytes_sent <= 1)
-                    CloseSocket();
-            }
-            if (instance->SetSocket())
-            {
-                ShutDownSocket();
-            }
+            PrintError("Socket Revc Error: ", errno);
+            PrintReport("Socket Revc Error:", len);
+            CloseSocket();
         }
         else
+            status = rx_ring->WriteData(buffer, len);
+    }
+    return status;
+}
+int TcpApi::Send(int status)
+{
+    char buffer[256];
+    int len = 0;
+    if (tx_ring->DataAvailible() > 0 || 1)
+    {
+        len = tx_ring->ReadData(buffer);
+        PrintReport("Tx Buffer Read: ", len);
+    }
+    if (status <= RingBuffer::UNEXPECTED_ERROR)
+    {
+        PrintReport("Tx Buffer Error: ", status);
+        CloseSocket();
+    }
+    if (len > 0 || 1)
+    {
+        send(sock, buffer, len, 0);
+        PrintReport("Data Should Be Sent", len);
+    }
+    if (len <= RingBuffer::UNEXPECTED_ERROR)
+    {
+        PrintError("Socket Send Error: ", errno);
+        PrintReport("Socket Send Error:", len);
+        CloseSocket();
+    }
+    return status;
+}
+
+void TcpApi::TcpTask()
+{
+    int rx_status = 0, tx_status = 0;
+    PrintReport("TcpTask Sock: ", sock);
+    if (sock <= 0)
+    {
+        PrintReport("TcpTask: ", 2);
+        BeginSocket();
+    }
+    else
+    {
+        PrintReport("TcpTask: ", 5);
+        tx_status = Send(tx_status);
+        PrintReport("TcpTask: ", 6);
+        if (tx_status<= RingBuffer::UNEXPECTED_ERROR)
         {
-            ESP_LOGI(TAG, "No active connection. Re-establishing socket...");
-            if (client_socket < 0)
-            {
-                ESP_LOGE(TAG, "Failed to re-establish socket");
-                client_socket = instance->ConnectSocket();
-            }
-            else
-            {
-                ESP_LOGI(TAG, "New connection established");
-            }
+            PrintReport("Tx Buffer Error: ", tx_status);
+            CloseSocket();
         }
-        vTaskDelay(1);
+        PrintReport("TcpTask: ", 3);
+
+        
+        rx_status = Read(rx_status);
+        PrintReport("TcpTask: ", 4);
+        if (rx_status <= RingBuffer::UNEXPECTED_ERROR)
+        {
+            PrintReport("Rx Buffer Error: ", rx_status);
+            CloseSocket();
+        }
+        if (reset_socket)
+        {
+            CloseSocket();
+        }
     }
 }
 
 void TcpApi::ResetSocket()
 {
     reset_socket = true;
-}
-bool TcpApi::SetSocket()
-{
-    if (reset_socket)
-    {
-        std::cout<<"RESETING"<<std::endl;
-        reset_socket = false;
-        return true;
-    }
-    return reset_socket;
 }

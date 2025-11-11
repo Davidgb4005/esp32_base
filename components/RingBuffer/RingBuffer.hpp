@@ -11,7 +11,7 @@
 #pragma once
 
 #include "freertos/FreeRTOS.h"
-#include "Config.hpp"
+#include "Debug.hpp"
 
 /**
  * @class RingBuffer
@@ -25,7 +25,6 @@ public:
      * @param len Length of the buffer in bytes.
      */
     RingBuffer(int len);
-
     /**
      * @brief Destructor. Frees the allocated buffer memory.
      */
@@ -102,6 +101,7 @@ public:
         INCOMPLETE_DATA = -1,  ///< Partial message in buffer
         INVALID_DATA = -3,     ///< Invalid message length
         BUFFER_FULL = -4,      ///< Buffer is full
+        //Everything Below This is Critial Error Which Requires Buffer Reset
         UNEXPECTED_ERROR = -100, ///< Unexpected error
         FATEL_ERROR = -101,      ///< Fatal error
         BUFFER_OVERREAD = -102,  ///< Attempted to read more than available

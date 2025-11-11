@@ -135,7 +135,8 @@ int RingBuffer::ReadData(char *c)
  */
 int RingBuffer::WriteData(char *c, int len)
 {
-    if (fatel_error)
+    PrintDebug("Write Data Called");
+    if (fatel_error && 0)
     {
         PrintDebug("Fatal Error");
         return FATEL_ERROR;
@@ -153,11 +154,11 @@ int RingBuffer::WriteData(char *c, int len)
         return BUFFER_FULL;
     }
     int i;
+    PrintDebug("Writing Data To Buffer");
     for (i = 0; i < len; i++)
     {
         *write_ptr++ = *c++;
         data_availible++;
-
         if (write_ptr == end_ptr)
             write_ptr = start_ptr;
     }

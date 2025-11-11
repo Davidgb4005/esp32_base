@@ -1,5 +1,4 @@
-#include "ErrorHandler.hpp"
-
+#include "Debug.hpp"
 #if DEBUG
 extern "C" {
     #include <errno.h>
@@ -7,6 +6,15 @@ extern "C" {
 #include <iostream>
 #endif
 
+void PrintReport(const char * c ,const char * error_code ,const char * c1 ,int error_code1){
+    std::cout<<c<<error_code<<c1<<error_code1<<std::endl;
+}
+void PrintReport(const char * c ,int error_code){
+    std::cout<<c<<error_code<<std::endl;
+}
+void PrintReport(const char * c){
+    std::cout<<c<<std::endl;
+}
 void PrintError(const char *c ,int error_code)
 {
 #if DEBUG
