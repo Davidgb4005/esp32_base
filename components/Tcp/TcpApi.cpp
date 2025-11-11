@@ -448,7 +448,6 @@ void TcpApi::TcpClientTask(void *PvParameters)
             if (client_socket < 0)
             {
                 ESP_LOGE(TAG, "Failed to re-establish socket");
-                vTaskDelay(300 / portTICK_PERIOD_MS);
                 client_socket = instance->ConnectSocket();
             }
             else

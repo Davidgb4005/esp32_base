@@ -86,6 +86,7 @@ int RingBuffer::ReadData(char *c)
     if (msg_len < 1)
     {
         read_ptr++;
+        data_availible--;
         PrintDebug("Invalid Data");
         return INVALID_DATA;
     }
@@ -151,7 +152,6 @@ int RingBuffer::WriteData(char *c, int len)
         PrintDebug("Buffer Full");
         return BUFFER_FULL;
     }
-
     int i;
     for (i = 0; i < len; i++)
     {

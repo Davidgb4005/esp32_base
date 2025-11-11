@@ -89,7 +89,6 @@ extern "C" void app_main(void)
         }
             RingBuffer::PrintMsg(buffer, len);
         }
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
         vTaskDelay(1);
     }
 }
