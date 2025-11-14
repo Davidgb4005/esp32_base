@@ -310,83 +310,51 @@ void TcpApi::SetBlocking(bool blocking)
 
 int TcpApi::Read(int status)
 {
-    char buffer[256];
-    int len = 0;
+    RingBuffer::Telegram data{
+        0,
+        new char[255],
+        0
+    };
+    int error_code = 0;
     if (status != RingBuffer::BUFFER_FULL)
     {
-        len = recv(sock, buffer, sizeof(buffer) - 1, 0);
-        if (len < 1)
+        data.message_length = recv(sock, data.message, sizeof(data.message) - 1, 0);
+        if (data.message_length < 1)
         {
             PrintError("Socket Revc Error: ", errno);
-            PrintReport("Socket Revc Error:", len);
+            PrintReport("Socket Revc Error:", error_code);
             CloseSocket();
         }
         else
-            status = rx_ring->WriteData(buffer, len);
+            status = rx_ring->WriteData(data);
     }
     return status;
 }
 int TcpApi::Send(int status)
 {
-    char buffer[256];
-    int len = 0;
-    if (tx_ring->DataAvailible() > 0 || 1)
+    RingBuffer::Telegram data{
+        0,
+        new char[255],
+        0
+    };
+    if (tx_ring->DataAvailible() > 0)
     {
-        len = tx_ring->ReadData(buffer);
-        PrintReport("Tx Buffer Read: ", len);
+        tx_ring->ReadData(data);
     }
-    if (status <= RingBuffer::UNEXPECTED_ERROR)
-    {
-        PrintReport("Tx Buffer Error: ", status);
-        CloseSocket();
-    }
-    if (len > 0 || 1)
-    {
-        send(sock, buffer, len, 0);
-        PrintReport("Data Should Be Sent", len);
-    }
-    if (len <= RingBuffer::UNEXPECTED_ERROR)
-    {
-        PrintError("Socket Send Error: ", errno);
-        PrintReport("Socket Send Error:", len);
-        CloseSocket();
-    }
+        send(sock, data.message, data.message_length, 0);
     return status;
 }
 
 void TcpApi::TcpTask()
 {
     int rx_status = 0, tx_status = 0;
-    PrintReport("TcpTask Sock: ", sock);
     if (sock <= 0)
     {
-        PrintReport("TcpTask: ", 2);
         BeginSocket();
     }
     else
     {
-        PrintReport("TcpTask: ", 5);
-        tx_status = Send(tx_status);
-        PrintReport("TcpTask: ", 6);
-        if (tx_status<= RingBuffer::UNEXPECTED_ERROR)
-        {
-            PrintReport("Tx Buffer Error: ", tx_status);
-            CloseSocket();
-        }
-        PrintReport("TcpTask: ", 3);
-
-        
-        rx_status = Read(rx_status);
-        PrintReport("TcpTask: ", 4);
-        if (rx_status <= RingBuffer::UNEXPECTED_ERROR)
-        {
-            PrintReport("Rx Buffer Error: ", rx_status);
-            CloseSocket();
-        }
-        if (reset_socket)
-        {
-            CloseSocket();
-        }
+        Send(tx_status);
     }
 }
 

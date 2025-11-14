@@ -1,25 +1,9 @@
-/**
- * @file RingBuffer.cpp
- * @brief Implementation of the RingBuffer class for circular buffer operations.
- *
- * @details
- * This class provides a fixed-length circular buffer for storing and retrieving
- * data streams (e.g., TCP or UART data). It includes internal error handling and
- * optional debugging output via `#define DEBUG 1`.
- */
-
 #include "RingBuffer.hpp"
-#include <memory>
-
+#define DEBUG 1
 #if DEBUG
 #include <iostream>
 #endif
 
-/**
- * @brief Constructs a RingBuffer of a specified length.
- * 
- * @param len Length of the buffer in bytes.
- */
 RingBuffer::RingBuffer(int len)
 {
     buffer = new char[len];
@@ -27,230 +11,210 @@ RingBuffer::RingBuffer(int len)
     end_ptr = buffer + len;
     read_ptr = buffer;
     write_ptr = buffer;
-    fatel_error = false;
     buffer_len = len;
     data_availible = 0;
 }
 
-/**
- * @brief Destructor. Frees allocated buffer memory.
- */
 RingBuffer::~RingBuffer()
+
 {
     delete[] buffer;
 }
-
-/**
- * @brief Resets the buffer to an empty state.
- */
 void RingBuffer::ResetBuffer()
 {
     read_ptr = buffer;
     write_ptr = buffer;
-    fatel_error = false;
+    buffer_overflow = false;
     data_availible = 0;
-    PrintDebug("Buffer Reset");
 }
 
-/**
- * @brief Returns the number of bytes currently available in the buffer.
- * 
- * @return int Number of bytes available for reading.
- */
+int RingBuffer::ReadData(Telegram & data)
+{
+
+    data.message_length = *read_ptr;
+    if (data_availible < data.message_length)
+    {
+        return INCOMPLETE_DATA;
+    }
+    else
+    {
+        // Read Message Length As First Byte
+        data.check_sum = 0;
+        data.check_sum += *(read_ptr);
+        AdvanceReadPointer();
+        int i;
+        for (i = 0; i < data.message_length; i++)
+        {
+            *(data.message + i) = *(read_ptr);
+            data.check_sum += *(read_ptr);
+            AdvanceReadPointer();
+        }
+        if (!ValidateCheckSum(&data.check_sum))
+        {
+            return INVALID_CHECKSUM;
+        }
+
+        return i;
+    }
+    return UNEXPECTED_ERROR;
+}
+
+int RingBuffer::WriteData(Telegram data)
+{
+    if (data.message_length < 2)
+    {
+        return INVALID_DATA;
+    }
+    else if (data.message_length+data_availible > buffer_len) {
+        return BUFFER_FULL;
+    }
+    else if (data.message_length > 253)
+    {
+        return MESSAGE_OVERLENGTH;
+    }
+    else
+    {
+        uint16_t check_sum = 0;
+        *write_ptr = data.message_length;
+        check_sum += *write_ptr;
+        AdvanceWritePointer();
+        int i;
+        for (i = 0; i < data.message_length; i++)
+        {
+            *write_ptr = *(data.message + i);
+            check_sum += *write_ptr;
+            AdvanceWritePointer();
+        }
+        InsertCheckSum(&check_sum);
+        return i;
+    }
+    return UNEXPECTED_ERROR;
+}
 int RingBuffer::DataAvailible()
 {
     return data_availible;
 }
 
-/**
- * @brief Reads one message from the buffer.
- * 
- * @param[out] c Pointer to a destination buffer for the data.
- * @return 
- *  - >0: Number of bytes read  
- *  - <=0: Error code (e.g., `NO_DATA`, `BUFFER_OVERREAD`, etc.)
- */
-int RingBuffer::ReadData(char *c)
+int RingBuffer::AdvanceReadPointer()
 {
-    if (fatel_error)
+    if (data_availible < 1)
     {
-        PrintDebug("Fatal Error");
-        return FATEL_ERROR;
+        return BUFFER_OVERREAD;
     }
-    if (read_ptr == write_ptr)
+    else if (read_ptr == end_ptr)
     {
-        return NO_DATA;
-    }
-
-    int msg_len = *read_ptr;
-    if (msg_len < 1)
-    {
-        read_ptr++;
         data_availible--;
-        PrintDebug("Invalid Data");
-        return INVALID_DATA;
-    }
-
-    if (data_availible < msg_len)
-    {
-        PrintDebug("Incomplete Data");
-        return INCOMPLETE_DATA;
-    }
-
-    read_ptr++;
-    data_availible--;
-    if (read_ptr == end_ptr)
         read_ptr = start_ptr;
-
-    int i;
-    for (i = 0; i < msg_len; i++)
-    {
-        *c++ = *read_ptr++;
-        data_availible--;
-
-        if (read_ptr == end_ptr)
-            read_ptr = start_ptr;
-
-        if (data_availible < 0)
-        {
-            fatel_error = true;
-            PrintDebug("Buffer Overread");
-            return BUFFER_OVERREAD;
-        }
     }
-
-    PrintDataAvailibleDebug(data_availible);
-    return i;
+    else
+    {
+        data_availible--;
+        read_ptr++;
+    }
+    return (0);
 }
 
-/**
- * @brief Writes data to the buffer.
- * 
- * @param[in] c   Pointer to the source data.
- * @param[in] len Length of data in bytes.
- * 
- * @return 
- *  - >0: Number of bytes written  
- *  - <=0: Error code (e.g., `BUFFER_FULL`, `BUFFER_OVERFLOW`, etc.)
- */
-int RingBuffer::WriteData(char *c, int len)
+int RingBuffer::AdvanceWritePointer()
 {
-    PrintDebug("Write Data Called");
-    if (fatel_error && 0)
+
+    if (write_ptr == read_ptr - 1 || (write_ptr == end_ptr && read_ptr == start_ptr))
     {
-        PrintDebug("Fatal Error");
-        return FATEL_ERROR;
-    }
-    else if (data_availible > buffer_len)
-    {
-        PrintDebug("Buffer Overflow");
-        fatel_error = true;
         return BUFFER_OVERFLOW;
     }
-    else if (data_availible + len > buffer_len - 1)
+    else if (write_ptr == end_ptr)
     {
-        vTaskDelay(1);
-        PrintDebug("Buffer Full");
-        return BUFFER_FULL;
-    }
-    int i;
-    PrintDebug("Writing Data To Buffer");
-    for (i = 0; i < len; i++)
-    {
-        *write_ptr++ = *c++;
         data_availible++;
-        if (write_ptr == end_ptr)
-            write_ptr = start_ptr;
+        write_ptr = start_ptr;
     }
-
-    PrintDataAvailibleDebug(data_availible);
-    return i;
+    else
+    {
+        data_availible++;
+        write_ptr++;
+    }
+    return (0);
 }
-
-/* -------------------------------------------------------------------------- */
-/*                              Debug Functions                               */
-/* -------------------------------------------------------------------------- */
-
-/**
- * @brief Prints a debug message if DEBUG is enabled.
- * 
- * @param[in] c The message to print.
- */
-void RingBuffer::PrintDebug(const char *c)
+void RingBuffer::InsertCheckSum(uint16_t *check_sum_ptr)
 {
-#if DEBUG
-    std::cout << c << std::endl;
-#endif
+    uint16_t check_sum = *check_sum_ptr;
+    check_sum = ~check_sum + 1;
+    char msb = check_sum >> 8;
+    char lsb = check_sum & 0xff;
+    *write_ptr = msb;
+    AdvanceWritePointer();
+    *write_ptr = lsb;
+    AdvanceWritePointer();
 }
 
-/**
- * @brief Prints the number of bytes currently available in the buffer.
- * 
- * @param[in] i Reference to the available byte count.
- */
-void RingBuffer::PrintDataAvailibleDebug(int &i)
+bool RingBuffer::ValidateCheckSum(uint16_t *check_sum_ptr)
 {
-#if DEBUG
-    std::cout << "Data Available: " << i << std::endl;
-#endif
+    uint16_t msb = (*read_ptr) << 8;
+    AdvanceReadPointer();
+    uint16_t lsb = (*read_ptr) & 0x00ff;
+    AdvanceReadPointer();
+    uint16_t check_sum = msb + lsb + *check_sum_ptr;
+    // if ((msb + lsb + *check_sum_ptr) != 0) Figure Out Why This Fucks it
+    if ((check_sum) != 0)
+    {
+        return false;
+    }
+    return true;
 }
 
-/**
- * @brief Prints all current buffer contents (for debugging only).
- */
 void RingBuffer::PrintData()
 {
-#if DEBUG
+#if DEBUG // Enables Console Output For Debugging
     int len = 0;
     char *temp_read_ptr = read_ptr;
     int temp_data_available = data_availible;
-
     if (temp_data_available < 1)
+    {
+        std::cout << "No Data" << std::endl;
         return;
-
+    }
     char c;
     while (temp_data_available > 0)
     {
-        len = *temp_read_ptr++;
-        temp_data_available--;
+        len = (*temp_read_ptr);
 
-        if (len > temp_data_available)
+        if (len - 1 > temp_data_available)
         {
-            std::cout << "Data Fragment (" 
-                      << temp_data_available << "/" << static_cast<int>(len) 
-                      << "): ";
+            std::cout << "Data Fragment(" << (temp_data_available) << "/" << static_cast<int>(len) << ") : ";
         }
         else
         {
-            std::cout << "Data Length (" << static_cast<int>(len) << "): ";
+            std::cout << "Data Length(" << static_cast<int>(*temp_read_ptr) << ") : ";
         }
 
+        temp_read_ptr++;
+        temp_data_available--;
         for (int k = 0; k < len; ++k)
         {
-            c = *temp_read_ptr++;
+            c = *temp_read_ptr;
             std::cout << c;
+            temp_read_ptr++;
             temp_data_available--;
-
             if (temp_read_ptr > end_ptr)
+            {
                 temp_read_ptr = start_ptr;
+            }
         }
+        std::cout << " - Checksum MSB:" << static_cast<int>(*temp_read_ptr);
+        temp_read_ptr++;
+        temp_data_available--;
+        std::cout << " LSB:" << static_cast<int>(*temp_read_ptr);
+        temp_read_ptr++;
+        temp_data_available--;
         std::cout << std::endl;
     }
 #endif
 }
 
-/**
- * @brief Prints a single message for debugging.
- * 
- * @param[in] c   Pointer to the message data.
- * @param[in] len Length of the message.
- */
-void RingBuffer::PrintMsg(char *c, int len)
+void RingBuffer::PrintMsg(Telegram data)
 {
 #if DEBUG
-    for (int k = 0; k < len; k++)
+    for (int k = 0; k < data.message_length; k++)
     {
-        std::cout << c[k];
+        std::cout << data.message[k];
     }
     std::cout << std::endl;
 #endif
