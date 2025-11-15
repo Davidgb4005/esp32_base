@@ -14,20 +14,19 @@
 #include "esp_task_wdt.h"
 #include <iostream>
 
-TcpApi::TcpApi(int tx_buffer_size, int rx_buffer_size,
+TcpApi::TcpApi(TcpBuffer * rx_data,TcpBuffer * tx_data,
                const char *ip_addr, int port,
                ConnectionType socket_type)
 {
-    this->rx_buffer = new RingBuffer(rx_buffer_size);
-    this->tx_buffer = new RingBuffer(tx_buffer_size);
+    this->rx_data = rx_data;
+    this->tx_data = tx_data;
     this->ip_addr = ip_addr;
     this->port = port;
     this->connection_type = connection_type;
 }
 TcpApi::~TcpApi()
 {
-    delete[] rx_buffer;
-    delete[] tx_buffer;
+
 }
 void TcpApi::ClientInit()
 {
@@ -85,65 +84,32 @@ void TcpApi::CloseSocket()
     }
 }
 
-void TcpApi::TcpTask()
+int TcpApi::TcpTaskSend(TcpBuffer *buffer)
 {
-    char temp_rx_buffer[256];
-    char temp_tx_buffer[256];
-    int rx_len = 0;
-    int tx_len = 0;
-
-    if (!rx_buffer->BufferFull())
+    buffer->msg_len = send(sock, buffer->data, buffer->msg_len, 0);
+    if (buffer->msg_len < 0 && 0)
     {
-        rx_len = recv(sock, temp_rx_buffer, sizeof(temp_rx_buffer) - 1, 0);
-        if (rx_len < 0 && !(errno == EAGAIN || errno == EWOULDBLOCK))
-        {
-            CloseSocket();
-        }
+        return -1;
     }
-    rx_len = rx_buffer->WriteStruct(temp_rx_buffer);
-    if (rx_len <= RingBuffer::UNEXPECTED_ERROR)
+    else
     {
-        // rx_buffer->ResetBuffer(); <<<----- ISSSUE HERE
+        buffer->data_ready = false;
+        return 1;
     }
-
-    if (tx_buffer->DataAvailible() > 0)
-    {
-        tx_len = tx_buffer->ReadData(temp_tx_buffer);
-
-        if (tx_len <= RingBuffer::UNEXPECTED_ERROR)
-        {
-            tx_buffer->ResetBuffer();
-        }
-        else if (send(sock, temp_tx_buffer, tx_len, 0) < 0)
-        {
-            CloseSocket();
-        }
-    }
-    // This Is Testing Stuff
-
-#if 0
-        char testbuffer[256];
-        int testlen;
-        if (rx_buffer->BufferFull() || true)
-        {
-            
-                testlen = rx_buffer->ReadData(testbuffer);
-                if (testlen < 0)
-                {
-                    // std::cout << testlen << std::endl;
-                }
-                else
-                {
-                    rx_buffer->PrintData();
-                    tx_buffer->WriteStruct(testbuffer);
-                    RingBuffer::PrintMsg(testbuffer, testlen);
-                }
-            
-        }
-#endif
-    // End Of Testing Stuff
 }
-
+int TcpApi::TcpTaskRecv(TcpBuffer *buffer)
+{
+    buffer->msg_len = recv(sock, buffer->data, sizeof(buffer->data) - 1, 0);
+    if (buffer->msg_len < 0 && 0)
+    {
+        return -1;
+    }
+    else
+    {
+        buffer->data_ready = true;
+        return 1;
+    }
+}
 bool TcpApi::SocketActive()
 {
     return socket_active;
@@ -165,20 +131,3 @@ void TcpApi::EnableBlocking(bool blocking)
     }
 }
 
-int TcpApi::WriteString(char *buffer, int len)
-{
-    return tx_buffer->WriteString(buffer, len);
-}
-int TcpApi::WriteChars(char *buffer, int len)
-{
-    return tx_buffer->WriteChars(buffer, len);
-}
-int TcpApi::WriteStruct(void *data)
-{
-    return tx_buffer->WriteStruct(data);
-}
-
-int TcpApi::ReadData(void *buffer)
-{
-    return rx_buffer->ReadData(buffer);
-}

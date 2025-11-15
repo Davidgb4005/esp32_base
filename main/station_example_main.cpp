@@ -16,10 +16,8 @@ static void TcpThread(void *PvParameters)
     TcpApi *tcp_task = static_cast<TcpApi *>(PvParameters);
     WifiConfigCheck();
     WifiInit("ESP32", "Pa55w0rd");
-    int do_once = 0;
     while (1)
     {
-        std::cout << "THIS IS THE TEST" << std::endl;
         if (WifiConnected() == false)
         {
             WifiConnect();
@@ -28,42 +26,24 @@ static void TcpThread(void *PvParameters)
         {
             std::cout << "Trying Cocket" << std::endl;
             tcp_task->ClientInit();
-            do_once = 1;
         }
 
         else
         {
-            char testbuffer[256];
-            int testlen = 0;
             tcp_task->EnableBlocking(false);
-            tcp_task->tx_buffer->ResetBuffer();
-            tcp_task->rx_buffer->ResetBuffer();
-            recv(tcp_task->sock,testbuffer, sizeof(testbuffer) - 1, 0);
-             while (tcp_task->socket_active)
+            while (tcp_task->SocketActive())
             {
-                // vTaskDelay(pdMS_TO_TICKS(10));
-                tcp_task->TcpTask();
-                if (tcp_task->rx_buffer->BufferFull() || true)
+                if (tcp_task->tx_data->data_ready)
                 {
-
-                    testlen = tcp_task->rx_buffer->ReadData(testbuffer);
-                    if (testlen < 0)
-                    {
-                        // std::cout << testlen << std::endl;
-                    }
-                    else
-                    {
-                        // std::cout << testlen << std::endl;
-                        //  tcp_task->rx_buffer->PrintData();
-                        //  tcp_task->tx_buffer->WriteStruct(testbuffer);
-                        for (int k = 1; k < testlen; k++)
-                        {
-                            std::cout << testbuffer[k];
-                        }
-                        std::cout << std::endl;
-                        testlen = -1;
-                    }
+                    std::cout << "Sending" << std::endl;
+                    tcp_task->TcpTaskSend(tcp_task->tx_data);
                 }
+                if (!(tcp_task->rx_data->data_ready))
+                {
+                    std::cout << "Reading" << std::endl;
+                    tcp_task->TcpTaskRecv(tcp_task->rx_data);
+                }
+                vTaskDelay(50);
             }
         }
     }
@@ -73,6 +53,31 @@ static void TcpThread(void *PvParameters)
 extern "C" void app_main(void)
 {
 
-    TcpApi *tcp_task = new TcpApi(5000, 5000, "192.168.8.116", 8090, CLIENT);
+    TcpBuffer *rx_data = new TcpBuffer;
+    TcpBuffer *tx_data = new TcpBuffer;
+    TcpApi *tcp_task = new TcpApi(rx_data, tx_data, "192.168.8.116", 8090, CLIENT);
     xTaskCreate(TcpThread, "Tcp Task", 4096, tcp_task, 5, NULL);
+    int i = 0;
+    while (1)
+    {
+        if (!(tcp_task->tx_data->data_ready))
+        {
+            tx_data->data[0] = i & 0xff;
+            tx_data->data[1] = i >> 8;
+            tx_data->data_ready = true;
+            tx_data->msg_len = 2;
+            i++;
+        }
+        if (tcp_task->rx_data->data_ready)
+        {
+            std::cout << "Printing Data Out" << std::endl;
+            for (int k = 0; k < rx_data->msg_len; k++)
+            {
+                std::cout << rx_data->data[k];
+            }
+            std::cout << std::endl;
+            rx_data->data_ready = false;
+        }
+        vTaskDelay(50);
+    }
 }
