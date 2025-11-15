@@ -22,6 +22,7 @@ RingBuffer::~RingBuffer()
 }
 void RingBuffer::ResetBuffer()
 {
+    std::cout<<"Reset Buffer"<<data_availible<<std::endl;
     read_ptr = buffer;
     write_ptr = buffer;
     data_availible = 0;
@@ -30,8 +31,7 @@ void RingBuffer::ResetBuffer()
 
 int RingBuffer::ReadData(char *buffer)
 {
-
-    int len = (*read_ptr) + 1;
+    int len = (*read_ptr);
     if (data_availible < len)
     {
         return INCOMPLETE_DATA;
@@ -51,7 +51,6 @@ int RingBuffer::ReadData(char *buffer)
         {
             return INVALID_CHECKSUM;
         }
-
         return i;
     }
 }
@@ -79,7 +78,7 @@ int RingBuffer::WriteData(char *buffer, int len)
         {
             if (bytes_remaining <= 0)
             {
-                bytes_remaining = (*(buffer + i)) + 1;
+                bytes_remaining = (*(buffer + i));
             }
             *write_ptr = (*(buffer + i));
             check_sum += *write_ptr;
@@ -194,8 +193,6 @@ void RingBuffer::PrintData()
             std::cout << "Data Length(" << static_cast<int>(*temp_read_ptr) << ") : ";
         }
 
-        temp_read_ptr++;
-        temp_data_available--;
         for (int k = 0; k < len; ++k)
         {
             c = *temp_read_ptr;

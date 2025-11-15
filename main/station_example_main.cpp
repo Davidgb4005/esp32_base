@@ -15,7 +15,7 @@ extern "C" void app_main(void)
 
     WifiConfigCheck();
     WifiInit("ESP32", "Pa55w0rd");
-    TcpApi tcp_task(512, 512, "192.168.8.116", 8090, CLIENT);
+    TcpApi tcp_task(30, 30, "192.168.8.116", 8090, CLIENT);
     while (true)
     {
         if (WifiConnected() == false)

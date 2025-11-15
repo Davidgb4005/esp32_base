@@ -103,20 +103,18 @@ void TcpApi::TcpTask()
             {
                 CloseSocket();
             }
-            else
-            {
-                rx_len = rx_buffer->WriteData(temp_rx_buffer, rx_len);
-                if (rx_len < 0)
-                {
-                    rx_buffer->ResetBuffer();
-                }
-            }
         }
+        rx_len = rx_buffer->WriteData(temp_rx_buffer, rx_len);
+        if (rx_len <= RingBuffer::UNEXPECTED_ERROR)
+        {
+            //rx_buffer->ResetBuffer(); <<<----- ISSSUE HERE
+        }
+
         if (tx_buffer->DataAvailible() > 0)
         {
             tx_len = tx_buffer->ReadData(temp_tx_buffer);
 
-            if (tx_len < 0)
+            if (tx_len <= RingBuffer::UNEXPECTED_ERROR)
             {
                 tx_buffer->ResetBuffer();
             }
@@ -125,29 +123,37 @@ void TcpApi::TcpTask()
                 CloseSocket();
             }
         }
-
+        // This Is Testing Stuff
         char testbuffer[256];
         int testlen;
-        rx_buffer->PrintData();
-        testlen = Read(testbuffer);
-        if (testlen < 0)
-        {
-            //std::cout << testlen << std::endl;
-        }
-        else
+        //rx_buffer->PrintData();
+#if 1
+        if (rx_buffer->BufferFull() || true)
         {
             
-            tx_buffer->WriteData(testbuffer, testlen);
-            RingBuffer::PrintMsg(testbuffer, testlen);
+                testlen = Read(testbuffer);
+                if (testlen < 0)
+                {
+                    // std::cout << testlen << std::endl;
+                }
+                else
+                {
+                    rx_buffer->PrintData();
+                    //tx_buffer->WriteData(testbuffer, testlen);
+                    RingBuffer::PrintMsg(testbuffer, testlen);
+                }
+            
         }
+#endif
         vTaskDelay(pdMS_TO_TICKS(500));
+        // End Of Testing Stuff
     }
 }
 
 void TcpApi::Send(char *buffer, int len)
 {
     char temp_buffer[256];
-    for (int i = 0; i < len; i++)
+    for (int i = 0; i < len - 1; i++)
     {
         temp_buffer[i + 1] = buffer[i];
     }
