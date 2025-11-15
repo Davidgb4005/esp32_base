@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "Config.hpp"
+    SRCS "Config.cpp" "Config.hpp"
     INCLUDE_DIRS "."
 
 )

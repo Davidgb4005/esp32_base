@@ -1,9 +1,9 @@
 #include "RingBuffer.hpp"
-#include <memory>
-
+#define DEBUG 1
 #if DEBUG
 #include <iostream>
 #endif
+
 RingBuffer::RingBuffer(int len)
 {
     buffer = new char[len];
@@ -11,12 +11,12 @@ RingBuffer::RingBuffer(int len)
     end_ptr = buffer + len;
     read_ptr = buffer;
     write_ptr = buffer;
-    fatel_error = false;
     buffer_len = len;
     data_availible = 0;
 }
 
 RingBuffer::~RingBuffer()
+
 {
     delete[] buffer;
 }
@@ -24,122 +24,149 @@ void RingBuffer::ResetBuffer()
 {
     read_ptr = buffer;
     write_ptr = buffer;
-    fatel_error = false;
     data_availible = 0;
-    PrintDebug("Buffer Reset");
+    message_complete = true;
 }
-   int RingBuffer::DataAvailible(){
-    return data_availible;
-   }
 
-int RingBuffer::ReadData(char *c)
+int RingBuffer::ReadData(char *buffer)
 {
-    if (fatel_error)
-    {
-        PrintDebug("Fatel Error");
-        return FATEL_ERROR;
-    }
-    if (read_ptr == write_ptr)
-    {
-        // PrintDebug("No Data");
-        return NO_DATA;
-    }
-    int msg_len = *read_ptr;
-    if (msg_len < 1)
-    {
-        read_ptr++;
-        PrintDebug("Invalid Data");
-        return INVALID_DATA;
-    }
 
-    if (data_availible < msg_len)
+    int len = (*read_ptr) + 1;
+    if (data_availible < len)
     {
-        PrintDebug("Incomplete Data");
         return INCOMPLETE_DATA;
     }
     else
     {
-        read_ptr++;
-        data_availible--;
-        if (read_ptr == end_ptr)
-            read_ptr = start_ptr;
+        // Read Message Length As First Byte
+        uint16_t read_check_sum = 0;
         int i;
-        for (i = 0; i < msg_len; i++)
+        for (i = 0; i < len; i++)
         {
-            *c = *(read_ptr);
-            c++;
-            read_ptr++;
-            data_availible--;
-            if (read_ptr == end_ptr)
-                read_ptr = start_ptr;
-            if (data_availible < 0)
-            {
-                fatel_error = true;
-                PrintDebug("Buffer Overread");
-                return BUFFER_OVERREAD;
-            }
+            *(buffer + i) = *(read_ptr);
+            read_check_sum += *(read_ptr);
+            AdvanceReadPointer();
         }
-        PrintDataAvailibleDebug(data_availible);
+        if (!ValidateCheckSum(&read_check_sum))
+        {
+            return INVALID_CHECKSUM;
+        }
+
         return i;
     }
-    PrintDebug("Unexpected Error");
-    return UNEXPECTED_ERROR;
 }
 
-int RingBuffer::WriteData(char *c, int len)
+int RingBuffer::WriteData(char *buffer, int len)
 {
-    if (fatel_error)
+
+    if (len + data_availible > buffer_len - 1)
     {
-        PrintDebug("Fatel Error");
-        return FATEL_ERROR;
-    }
-    else if (data_availible > buffer_len)
-    {
-        PrintDebug("Buffer Overflow");
-        fatel_error = true;
-        return BUFFER_OVERFLOW;
-    }
-    else if (data_availible + len > buffer_len - 1)
-    {
-        vTaskDelay(1);
-        PrintDebug("Buffer Full");
+        buffer_full = true;
         return BUFFER_FULL;
+    }
+    else
+    {
+        buffer_full = false;
+    }
+    if (len < 0)
+    {
+        return INVALID_DATA;
     }
     else
     {
         int i;
         for (i = 0; i < len; i++)
         {
-            *write_ptr = *c;
-            c++;
-            write_ptr++;
-            data_availible++;
-            if (write_ptr == end_ptr)
+            if (bytes_remaining <= 0)
             {
-                write_ptr = start_ptr;
+                bytes_remaining = (*(buffer + i)) + 1;
+            }
+            *write_ptr = (*(buffer + i));
+            check_sum += *write_ptr;
+            AdvanceWritePointer();
+            if (bytes_remaining == 0)
+            {
+                InsertCheckSum();
             }
         }
-        PrintDataAvailibleDebug(data_availible);
         return i;
     }
-    PrintDebug("Unexpected Error");
     return UNEXPECTED_ERROR;
 }
-
-
-// These are all debugging functions only enabled if #define DEBUG 1
-void RingBuffer::PrintDebug(const char *c)
+int RingBuffer::DataAvailible()
 {
-#if DEBUG
-    std::cout << c << std::endl;
-#endif
+    return data_availible;
+}
+bool RingBuffer::BufferFull()
+{
+    return buffer_full;
+}
+int RingBuffer::AdvanceReadPointer()
+{
+    if (data_availible < 1)
+    {
+        return BUFFER_OVERREAD;
+    }
+    else if (read_ptr == end_ptr)
+    {
+        data_availible--;
+        read_ptr = start_ptr;
+    }
+    else
+    {
+        data_availible--;
+        read_ptr++;
+    }
+    return (0);
 }
 
-void RingBuffer::PrintDataAvailibleDebug(int &i)
+int RingBuffer::AdvanceWritePointer()
 {
-#if DEBUG
-    std::cout << "Data Availible : " << i << std::endl;
-#endif
+
+    if (write_ptr == read_ptr - 1 || (write_ptr == end_ptr && read_ptr == start_ptr))
+    {
+        return BUFFER_OVERFLOW;
+    }
+    else if (write_ptr == end_ptr)
+    {
+        bytes_remaining--;
+        data_availible++;
+        write_ptr = start_ptr;
+    }
+    else
+    {
+        bytes_remaining--;
+        data_availible++;
+        write_ptr++;
+    }
+    return (0);
+}
+void RingBuffer::InsertCheckSum()
+{
+    check_sum = ~check_sum + 1;
+    char msb = check_sum >> 8;
+    char lsb = check_sum & 0xff;
+    *write_ptr = msb;
+    AdvanceWritePointer();
+    *write_ptr = lsb;
+    AdvanceWritePointer();
+    message_complete = true;
+    check_sum = 0;
+}
+
+bool RingBuffer::ValidateCheckSum(uint16_t *check_sum_ptr)
+{
+    uint16_t msb = (*read_ptr) << 8;
+    AdvanceReadPointer();
+    uint16_t lsb = (*read_ptr) & 0x00ff;
+    AdvanceReadPointer();
+    uint16_t read_check_sum = msb + lsb + *check_sum_ptr;
+    // if ((msb + lsb + *check_sum_ptr) != 0) Figure Out Why This Fucks it
+    if ((read_check_sum) != 0)
+    {
+        return false;
+    }
+    return true;
 }
 
 void RingBuffer::PrintData()
@@ -150,23 +177,25 @@ void RingBuffer::PrintData()
     int temp_data_available = data_availible;
     if (temp_data_available < 1)
     {
-        // std::cout << "No Data" << std::endl;
+        std::cout << "No Data" << std::endl;
         return;
     }
     char c;
     while (temp_data_available > 0)
     {
-        len = *temp_read_ptr;
-        temp_read_ptr++; // skip length prefix
-        temp_data_available--;
-        if (len > temp_data_available)
+        len = (*temp_read_ptr);
+
+        if (len - 1 > temp_data_available)
         {
             std::cout << "Data Fragment(" << (temp_data_available) << "/" << static_cast<int>(len) << ") : ";
         }
         else
         {
-            std::cout << "Data Length(" << static_cast<int>(len) << ") : ";
+            std::cout << "Data Length(" << static_cast<int>(*temp_read_ptr) << ") : ";
         }
+
+        temp_read_ptr++;
+        temp_data_available--;
         for (int k = 0; k < len; ++k)
         {
             c = *temp_read_ptr;
@@ -178,16 +207,23 @@ void RingBuffer::PrintData()
                 temp_read_ptr = start_ptr;
             }
         }
+        std::cout << " - Checksum MSB:" << static_cast<int>(*temp_read_ptr);
+        temp_read_ptr++;
+        temp_data_available--;
+        std::cout << " LSB:" << static_cast<int>(*temp_read_ptr);
+        temp_read_ptr++;
+        temp_data_available--;
         std::cout << std::endl;
     }
 #endif
 }
-void RingBuffer::PrintMsg(char *c, int len)
+
+void RingBuffer::PrintMsg(char *buffer, int len)
 {
 #if DEBUG
     for (int k = 0; k < len; k++)
     {
-        std::cout << c[k];
+        std::cout << buffer[k];
     }
     std::cout << std::endl;
 #endif
