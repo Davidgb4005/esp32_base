@@ -8,6 +8,7 @@
 */
 #include <iostream>
 #include "WifiApi.hpp"
+#include "RingBuffer.hpp"
 #include "TcpApi.hpp"
 // test
 static void TcpThread(void *PvParameters)
@@ -53,8 +54,8 @@ static void TcpThread(void *PvParameters)
 extern "C" void app_main(void)
 {
 
-    TcpBuffer *rx_data = new TcpBuffer;
-    TcpBuffer *tx_data = new TcpBuffer;
+    TcpBuffer *rx_data = new RingBuffer;
+    TcpBuffer *tx_data = new RingBuffer;
     TcpApi *tcp_task = new TcpApi(rx_data, tx_data, "192.168.8.116", 8090, CLIENT);
     xTaskCreate(TcpThread, "Tcp Task", 4096, tcp_task, 5, NULL);
     int i = 0;
