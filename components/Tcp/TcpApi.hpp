@@ -1,17 +1,11 @@
 #pragma once
-
+#include "RingBuffer.hpp"
 enum ConnectionType
 {
     CLIENT = 0,
     SERVER = 1
 };
-struct TcpBuffer
-{
-    bool lock = false;
-    bool data_ready = false;
-    int msg_len=0;
-    char data[512];
-};
+
 
 class TcpApi
 {
@@ -28,7 +22,7 @@ private:
 #endif
 
 public:
-    TcpApi(TcpBuffer * rx_buffer, TcpBuffer * tx_buffer,
+    TcpApi(RingBuffer * rx_buffer, RingBuffer * tx_buffer,
            const char *ip_addr = "0.0.0.0", int port = 0,
            ConnectionType socket_type = CLIENT);
     ~TcpApi();
@@ -37,8 +31,8 @@ public:
     // TODO
     void ServerInit();
     // IN PROGRESS
-    int TcpTaskRecv(TcpBuffer *buffer);
-    int TcpTaskSend(TcpBuffer *buffer);
+    int TcpTaskRecv(uint16_t offset);
+    int TcpTaskSend();
     int WriteString(char *buffer, int len);
     int WriteChars(char *buffer, int len);
     int WriteStruct(void *data);
@@ -53,8 +47,8 @@ public:
     const char *ip_addr = "0.0.0.0";
     int port = 0;
     ConnectionType connection_type = CLIENT;
-    TcpBuffer *rx_data;
-    TcpBuffer *tx_data;
+    RingBuffer *rx_data;
+    RingBuffer *tx_data;
     int sock = -1;
     bool socket_active = false;
     bool blocking = true;

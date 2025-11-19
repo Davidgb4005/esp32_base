@@ -14,7 +14,7 @@
 #include "esp_task_wdt.h"
 #include <iostream>
 
-TcpApi::TcpApi(TcpBuffer * rx_data,TcpBuffer * tx_data,
+TcpApi::TcpApi(RingBuffer *rx_data, RingBuffer *tx_data,
                const char *ip_addr, int port,
                ConnectionType socket_type)
 {
@@ -26,7 +26,6 @@ TcpApi::TcpApi(TcpBuffer * rx_data,TcpBuffer * tx_data,
 }
 TcpApi::~TcpApi()
 {
-
 }
 void TcpApi::ClientInit()
 {
@@ -84,31 +83,33 @@ void TcpApi::CloseSocket()
     }
 }
 
-int TcpApi::TcpTaskSend(TcpBuffer *buffer)
+int TcpApi::TcpTaskSend()
 {
-    buffer->msg_len = send(sock, buffer->data, buffer->msg_len, 0);
-    if (buffer->msg_len < 0 && 0)
+    uint8_t buffer[256];
+    int16_t data_length = 0;
+    if (tx_data->MessageAvailible())
     {
-        return -1;
+        data_length = tx_data->ReadRaw(buffer);
     }
-    else
+    if (data_length < 0)
     {
-        buffer->data_ready = false;
-        return 1;
+        return data_length;
     }
+    return (send(sock, buffer, data_length, 0));
 }
-int TcpApi::TcpTaskRecv(TcpBuffer *buffer)
+int TcpApi::TcpTaskRecv(uint16_t offset)
 {
-    buffer->msg_len = recv(sock, buffer->data, sizeof(buffer->data) - 1, 0);
-    if (buffer->msg_len < 0 && 0)
+    uint8_t buffer[256];
+    static int16_t data_length = 0;
+    if (offset == 0)
     {
-        return -1;
+        data_length = recv(sock, buffer, sizeof(buffer) - 1, 0); // THIS STATIC COULD CAUSE ISSUES
     }
-    else
+    if (data_length < 0)
     {
-        buffer->data_ready = true;
-        return 1;
+        return data_length;
     }
+    return (rx_data->WriteRaw(buffer, data_length, offset));
 }
 bool TcpApi::SocketActive()
 {
@@ -130,4 +131,3 @@ void TcpApi::EnableBlocking(bool blocking)
         blocking = false;
     }
 }
-
