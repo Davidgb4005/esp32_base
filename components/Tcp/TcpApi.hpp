@@ -22,7 +22,7 @@ private:
 #endif
 
 public:
-    TcpApi(RingBuffer * rx_buffer, RingBuffer tx_buffer,
+    TcpApi(RingBuffer * rx_buffer, RingBuffer * tx_buffer,
            const char *ip_addr = "0.0.0.0", int port = 0,
            ConnectionType socket_type = CLIENT);
     ~TcpApi();
@@ -31,7 +31,7 @@ public:
     // TODO
     void ServerInit();
     // IN PROGRESS
-    int TcpTaskRecv();
+    int TcpTaskRecv(uint16_t offset);
     int TcpTaskSend();
     int WriteString(char *buffer, int len);
     int WriteChars(char *buffer, int len);
@@ -47,8 +47,8 @@ public:
     const char *ip_addr = "0.0.0.0";
     int port = 0;
     ConnectionType connection_type = CLIENT;
-    TcpBuffer *rx_data;
-    TcpBuffer *tx_data;
+    RingBuffer *rx_data;
+    RingBuffer *tx_data;
     int sock = -1;
     bool socket_active = false;
     bool blocking = true;

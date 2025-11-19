@@ -86,7 +86,11 @@ void TcpApi::CloseSocket()
 int TcpApi::TcpTaskSend()
 {
     uint8_t buffer[256];
-    uint16_t data_length = tx_data.ReadRaw(buffer);
+    int16_t data_length = 0;
+    if (tx_data->MessageAvailible())
+    {
+        data_length = tx_data->ReadRaw(buffer);
+    }
     if (data_length < 0)
     {
         return data_length;
@@ -96,10 +100,10 @@ int TcpApi::TcpTaskSend()
 int TcpApi::TcpTaskRecv(uint16_t offset)
 {
     uint8_t buffer[256];
-    static uint16_t data_length = 0;
+    static int16_t data_length = 0;
     if (offset == 0)
     {
-        data_length = recv(sock, buffer, sizeof(buffer) - 1, 0); //THIS STATIC COULD CAUSE ISSUES
+        data_length = recv(sock, buffer, sizeof(buffer) - 1, 0); // THIS STATIC COULD CAUSE ISSUES
     }
     if (data_length < 0)
     {

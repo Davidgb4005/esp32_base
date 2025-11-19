@@ -1,12 +1,13 @@
+#pragma once
 #include <memory>
+#include <iostream>
 
-#ifndef _DEBUG
-#define _DEBUG 0
-#endif
+#define _DEBUG 1
+
 
 enum ErrorCodes
 {
-    DATA_TO_SHORT = -1,
+    RESERVED = -1,
     NO_MESSAGES = -2,
     BUFFER_FULL = -3,
     BUFFER_EMPTY = -4,
@@ -14,6 +15,7 @@ enum ErrorCodes
     STRING_LARGER_THAN_BUFFER = -6,
     STRUCT_LARGER_THAN_BUFFER = -7,
     RAW_DATA_LARGER_THAN_BUFFER = -8,
+    DATA_TO_SHORT = -9,
 
     UNEXPECTED_ERROR_GetType = -900,
     UNEXPECTED_ERROR_AdvanceWritePtr = -901,
@@ -69,8 +71,8 @@ private:
     uint16_t buffer_size = 0;
     bool buffer_full = false;
     bool buffer_empty = false;
-    //Debugging Features
-    void PrintDebug(const char * str ,int16_t error_code,int16_t line);
+    // Debugging Features
+    void PrintDebug(const char *str, int16_t error_code, int16_t line);
 
 public:
     RingBuffer(uint16_t buffer_size);
@@ -81,7 +83,7 @@ public:
     uint16_t Write(CharArrayTelegram *data);
 
     uint16_t WriteRaw(uint8_t *data, uint16_t len, uint16_t offset);
-    uint16_t ReadRaw(uint8_t * data);
+    uint16_t ReadRaw(uint8_t *data);
     uint16_t Read(Telegram *data);
     uint16_t Read(StringTelegram *data, char *buffer);
     uint16_t Read(CharArrayTelegram *data, char *buffer);
