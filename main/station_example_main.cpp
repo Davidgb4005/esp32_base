@@ -65,6 +65,7 @@ static void TcpThread(void *PvParameters)
                     send_fail = tcp_task->TcpTaskSend();
                 }
                 offset = tcp_task->TcpTaskRecv(offset);
+                //std::cout<<tcp_task->rx_data->BytesRemaining()<<std::endl;
                 if (offset <= UNEXPECTED_ERROR || send_fail <= UNEXPECTED_ERROR || send_fail == -1)
                 {
                     tcp_task->CloseSocket();
@@ -101,7 +102,7 @@ extern "C" void app_main(void)
             result = tcp_task->tx_data->Write(&stp_in);
         }
         //std::cout<<tcp_task->rx_data->BytesRemaining()<<std::endl;
-        if (tcp_task->rx_data->MessageAvailible()>512/sizeof(StepperMotorTelegram)-1)
+        if (tcp_task->rx_data->MessageAvailible())
         {
             result = tcp_task->rx_data->Read(&stp_out);
 

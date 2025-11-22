@@ -2,7 +2,7 @@
 #include <memory>
 #include <iostream>
 
-#define _DEBUG 1
+#define _DEBUG 0
 
 
 enum ErrorCodes

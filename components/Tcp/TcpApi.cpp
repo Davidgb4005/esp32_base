@@ -38,7 +38,8 @@ void TcpApi::ClientInit()
         server_addr.sin_family = AF_INET;
         server_addr.sin_addr.s_addr = inet_addr(ip_addr);
         server_addr.sin_port = htons(port);
-
+        tx_data->ResetBuffer();
+        rx_data->ResetBuffer();
         sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
         if (sock < 0)
         {
