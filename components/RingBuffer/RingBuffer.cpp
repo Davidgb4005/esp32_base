@@ -13,6 +13,16 @@ RingBuffer::~RingBuffer()
 {
     delete[] start_ptr;
 }
+void RingBuffer::ResetBuffer(){
+    read_ptr = start_ptr;
+    write_ptr = start_ptr;
+    bytes_availible = 0;
+    messages_availible = 0;
+    bytes_remaining = 0;
+    bytes_remaining_msb = 0;
+    bytes_remaining_lsb = 0;
+    PrintDebug("Buffer Reset",BUFFER_RESET,__LINE__);
+}
 uint16_t RingBuffer::MessageAvailible()
 {
     return messages_availible;
@@ -215,7 +225,6 @@ uint16_t RingBuffer::Write(Telegram *data)
     for (i = 0; i < size; i++)
     {
         *write_ptr = *(data_ptr + i);
-        std::cout << (uint16_t)(*write_ptr) << "  ";
         int16_t err = AdvanceWritePtr();
 
         if (err < 0)

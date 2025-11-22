@@ -55,45 +55,40 @@ static void TcpThread(void *PvParameters)
         else
         {
             tcp_task->EnableBlocking(false);
-            uint16_t offset = 0;
+            int16_t offset = 0;
+            int16_t send_fail = 0;
+            int16_t failure_counter = 0;
             while (tcp_task->SocketActive())
             {
                 if (tcp_task->tx_data->MessageAvailible())
                 {
-                    std::cout << "Sending" << std::endl;
-                    tcp_task->tx_data->PrintData();
-                    tcp_task->TcpTaskSend();
+                    send_fail = tcp_task->TcpTaskSend();
                 }
-                if (tcp_task->rx_data->MessageAvailible())
+                offset = tcp_task->TcpTaskRecv(offset);
+                if (offset <= UNEXPECTED_ERROR || send_fail <= UNEXPECTED_ERROR || send_fail == -1)
                 {
-                    std::cout << "Reading" << std::endl;
-                    offset = tcp_task->TcpTaskRecv(offset);
+                    tcp_task->CloseSocket();
+                    tcp_task->rx_data->ResetBuffer();
+                    tcp_task->tx_data->ResetBuffer();
                 }
-                vTaskDelay(50);
+
+                vTaskDelay(5);
             }
         }
     }
 #endif
 }
-    StepperMotorTelegram stp_in;
+StepperMotorTelegram stp_in;
 extern "C" void app_main(void)
 {
-
 
     stp_in.speed = 71;
     stp_in.direction = 72;
     stp_in.active = true;
     stp_in.time = 73;
     stp_in.mode = 'c';
-    if (0)
-    {
-        StepperMotorTelegram stp_out;
-        stp_in.speed = 1231;
-        stp_in.direction = 423;
-        stp_in.active = false;
-        stp_in.time = 432;
-        stp_in.mode = 'c';
-    }
+    StepperMotorTelegram stp_out;
+
     RingBuffer *rx_data = new RingBuffer(512);
     RingBuffer *tx_data = new RingBuffer(512);
     TcpApi *tcp_task = new TcpApi(rx_data, tx_data, "192.168.8.116", 8090, CLIENT);
@@ -104,12 +99,23 @@ extern "C" void app_main(void)
         if (tcp_task->tx_data->BytesRemaining() > sizeof(stp_in))
         {
             result = tcp_task->tx_data->Write(&stp_in);
-            tx_data->PrintData();
         }
-        if (tcp_task->rx_data->MessageAvailible())
+        //std::cout<<tcp_task->rx_data->BytesRemaining()<<std::endl;
+        if (tcp_task->rx_data->MessageAvailible()>512/sizeof(StepperMotorTelegram)-1)
         {
-            // result = tcp_task->rx_data->Read(&stp_out);
+            result = tcp_task->rx_data->Read(&stp_out);
+
+            std::cout << (int)stp_out.len_msb << " : ";
+            std::cout << (int)stp_out.len_lsb << " : ";
+            std::cout << (int)stp_out.type << " : ";
+            std::cout << (int)stp_out.address << " : ";
+            std::cout << stp_out.speed << " : ";
+            std::cout << stp_out.direction << " : ";
+            std::cout << stp_out.active << " : ";
+            std::cout << (int)stp_out.mode << " : ";
+            std::cout << stp_out.time << " : ";
+            std::cout << std::endl;
         }
-        vTaskDelay(50);
+        vTaskDelay(5);
     }
 }

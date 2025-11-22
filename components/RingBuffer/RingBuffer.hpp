@@ -16,7 +16,8 @@ enum ErrorCodes
     STRUCT_LARGER_THAN_BUFFER = -7,
     RAW_DATA_LARGER_THAN_BUFFER = -8,
     DATA_TO_SHORT = -9,
-
+    BUFFER_RESET = -10,
+    UNEXPECTED_ERROR = -899,
     UNEXPECTED_ERROR_GetType = -900,
     UNEXPECTED_ERROR_AdvanceWritePtr = -901,
     UNEXPECTED_ERROR_AdvanceReadPtr = -902,
@@ -77,7 +78,7 @@ private:
 public:
     RingBuffer(uint16_t buffer_size);
     ~RingBuffer();
-
+    void ResetBuffer();
     uint16_t Write(Telegram *data);
     uint16_t Write(StringTelegram *data);
     uint16_t Write(CharArrayTelegram *data);

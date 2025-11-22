@@ -51,8 +51,15 @@ void TcpApi::ClientInit()
             CloseSocket();
         }
         else
+        {
+            uint8_t buffer[256];
+            while (int t = recv(sock, buffer, sizeof(buffer) - 1, 0) < 0 && 0)
+            {
+                std::cout << t << sock << std::endl;
+            }
             socket_active = true;
-        std::cout << "Client Connected " << sock << std::endl;
+            std::cout << "Client Connected " << sock << std::endl;
+        }
     }
     else
     {
@@ -63,7 +70,7 @@ void TcpApi::CloseSocket()
 {
     if (sock < 0)
     {
-        // std::cout << "No Active Socket to close. sock=" << sock << std::endl;
+        std::cout << "No Active Socket to close. sock=" << sock << std::endl;
         return;
     }
     else
@@ -80,6 +87,7 @@ void TcpApi::CloseSocket()
             socket_active = false;
             sock = -1;
         }
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
@@ -91,11 +99,11 @@ int TcpApi::TcpTaskSend()
     {
         data_length = tx_data->ReadRaw(buffer);
     }
-    if (data_length < 0)
+    if (data_length > 0)
     {
-        return data_length;
+        return (send(sock, buffer, data_length, 0));
     }
-    return (send(sock, buffer, data_length, 0));
+    return data_length;
 }
 int TcpApi::TcpTaskRecv(uint16_t offset)
 {
@@ -104,12 +112,23 @@ int TcpApi::TcpTaskRecv(uint16_t offset)
     if (offset == 0)
     {
         data_length = recv(sock, buffer, sizeof(buffer) - 1, 0); // THIS STATIC COULD CAUSE ISSUES
+        if (data_length == 0)
+        {
+            CloseSocket();
+            return 0;
+        }
+        else if (data_length < 0)
+        {
+            return 0;
+        }
     }
-    if (data_length < 0)
-    {
-        return data_length;
+    int16_t rx_status = rx_data->WriteRaw(buffer, data_length, offset);
+    if (rx_status < 0 && rx_status> UNEXPECTED_ERROR){
+        return offset;
     }
-    return (rx_data->WriteRaw(buffer, data_length, offset));
+    else{
+        return rx_status;
+    }
 }
 bool TcpApi::SocketActive()
 {
